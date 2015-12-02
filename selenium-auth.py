@@ -33,40 +33,35 @@ def regparser(logoutIndicators, msg):
 	msgstring = ""
 	rexstring = ""
 	
-	if any("STATUS" in s for s in logoutIndicators):
-		msgstring = msgstring + "<#STATUS>" + str(msg.getResponseHeader().getStatusCode()) + "</#STATUS>"	
-	if any("HEADER" in s for s in logoutIndicators):
-		msgstring = msgstring + "<#HEADER>" + msg.getResponseHeader().toString() + "</#HEADER>"
-	if any("BODY" in s for s in logoutIndicators):
-		msgstring = msgstring + "<#BODY>" + msg.getResponseBody().toString() + "</#BODY>"
+	for indicatorDict in logoutIndicators:
+		matches = []
+		if "STATUS" in indicatorDict:
+			regex = re.compile(indicatorDict["STATUS"])
+			matches.append(re.search(regex, str(msg.getResponseHeader().getStatusCode())))
+		if "HEADER" in indicatorDict:
+			regex = re.compile(indicatorDict["HEADER"])
+			matches.append(re.search(regex, msg.getResponseHeader().toString()))
+		if "BODY" in indicatorDict:
+			regex = re.compile(indicatorDict["BODY"])
+			matches.append(re.search(regex, msg.getResponseBody().toString()))
+		if all(None != s for s in matches):
+			return True
+	return False
 
-	for indicatorDict in logoutIndicators:	
-		if rexstring != "":
-			rexstring = rexstring + "|"
-		rexstring = rexstring + "("
-		for key in indicatorDict:
-			rexstring = rexstring + "((?=.*?<#"+ key +">).*?" + str(indicatorDict[key]) + ".*?</#" + key + ">)"
-		rexstring = rexstring + ")"	
-
-	regex = re.compile(rexstring, re.DOTALL)
-	return re.search(regex, msgstring)	
-	
-	
 def responseReceived(msg, initiator, helper): 
-	print('responseReceived called for url=' + msg.getRequestHeader().getURI().toString())
+	#print('responseReceived called for url=' + msg.getRequestHeader().getURI().toString())
 		
 	if initiator == 2 or initiator == 3 or initiator == 4 or initiator == 6:	
 		
 		logoutIndicators = []
-		
 		logoutIndicators.append({'STATUS':'401'})
 		logoutIndicators.append({'STATUS':'302', 'HEADER':'Location.*login'})
 		logoutIndicators.append({'STATUS':'200', 'BODY':'Please login'})
 		
 		#print logoutIndicators
  
-		if  regparser(logoutIndicators, msg) is not None:
-			print "AUTHENTICATION REQUIRED! Your initiator is: " + str(initiator)
+		if  regparser(logoutIndicators, msg) is True:
+			print "AUTHENTICATION REQUIRED! Your initiator is: " + str(initiator) + " URL: " + msg.getRequestHeader().getURI().toString()
 			
 			import os
 			import org.parosproxy.paros.control.Control
