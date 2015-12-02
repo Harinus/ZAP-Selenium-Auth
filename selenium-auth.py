@@ -62,7 +62,7 @@ def responseReceived(msg, initiator, helper):
  
 		if  regparser(logoutIndicators, msg) is True:
 			print "AUTHENTICATION REQUIRED! Your initiator is: " + str(initiator) + " URL: " + msg.getRequestHeader().getURI().toString()
-			
+
 			import os
 			import org.parosproxy.paros.control.Control
 			import org.zaproxy.zap.extension.httpsessions.ExtensionHttpSessions
@@ -70,11 +70,12 @@ def responseReceived(msg, initiator, helper):
 			
 			zapsessions = org.parosproxy.paros.control.Control.getSingleton().getExtensionLoader().getExtension(org.zaproxy.zap.extension.httpsessions.ExtensionHttpSessions.NAME)
 			sessionSite = zapsessions.getHttpSessionsSite(msg.getRequestHeader().getURI().getHost() + ":" + str(msg.getRequestHeader().getHostPort()), False)
+			
+			seleniumSession = "Auth-Selenium"			
 
-			if sessionSite.getHttpSession("Auth-Selenium") is not None:
-				sessionSite.createEmptySession("Re-Auth-Selenium " + str(sessionSite.getNextSessionId()))
-			else:
-				sessionSite.createEmptySession("Auth-Selenium")
+			if sessionSite.getHttpSession(seleniumSession) is not None:
+				seleniumSession = "Re-Auth-Selenium " + str(sessionSite.getNextSessionId())
+			sessionSite.createEmptySession(seleniumSession)
 			
 			import subprocess as sub
 			selenese = sub.Popen("java -jar C:\Users\*\Desktop\Selenium_Custom.b1f2cf5.jar --strict-exit-code --proxy localhost:8080 --screenshot-on-fail C:\Users\*\Desktop\screehns --set-speed 2000 --cli-args /private-window --cli-args about:blank C:\Users\*\Desktop\WebGoat.html", stdout=sub.PIPE)
@@ -89,7 +90,12 @@ def responseReceived(msg, initiator, helper):
 				print output
 			else:
 				print "Auth-SUCCESS"
-			
+
+				import org.zaproxy.zap.session.CookieBasedSessionManagementHelper
+				org.zaproxy.zap.session.CookieBasedSessionManagementHelper.processMessageToMatchSession(msg, sessionSite.getHttpSession(seleniumSession))
+				helper.getHttpSender().sendAndReceive(msg, False);
+				print 'Re-Send-Authenticated=' + str(msg.getResponseHeader().getStatusCode())
+		
 		else: 
 			pass
 			#print "rcv-ignore"
