@@ -21,11 +21,11 @@
 #
 # New requests can be made like this:
 # msg2 = msg.cloneAll() // msg2 can then be safely changed as required without affecting msg
-# helper.getHttpSender().sendAndReceive(msg2, false);
-# print('msg2 response=' + str(msg2.getResponseHeader().getStatusCode()))
+# helper.getHttpSender().sendAndReceive(msg2, false)
+# print 'msg2 response=' + str(msg2.getResponseHeader().getStatusCode())
 
 def sendingRequest(msg, initiator, helper):
-	#print ('sendingRequest called for url=' + msg.getRequestHeader().getURI().toString())
+	#print 'sendingRequest called for url=' + msg.getRequestHeader().getURI().toString()
 	pass
 
 def regparser(logoutIndicators, msg):
@@ -48,58 +48,86 @@ def regparser(logoutIndicators, msg):
 			return True
 	return False
 
-def responseReceived(msg, initiator, helper): 
-	#print('responseReceived called for url=' + msg.getRequestHeader().getURI().toString())
-		
-	if initiator == 2 or initiator == 3 or initiator == 4 or initiator == 6:	
-		
-		logoutIndicators = []
-		logoutIndicators.append({'STATUS':'401'})
-		logoutIndicators.append({'STATUS':'302', 'HEADER':'Location.*login'})
-		logoutIndicators.append({'STATUS':'200', 'BODY':'Please login'})
-		
-		#print logoutIndicators
- 
-		if  regparser(logoutIndicators, msg) is True:
-			print "AUTHENTICATION REQUIRED! Your initiator is: " + str(initiator) + " URL: " + msg.getRequestHeader().getURI().toString()
+def responseReceived(msg, initiator, helper):
+	#print 'responseReceived called for url=' + msg.getRequestHeader().getURI().toString()
 
-			import os
-			import org.parosproxy.paros.control.Control
-			import org.zaproxy.zap.extension.httpsessions.ExtensionHttpSessions
-			import org.zaproxy.zap.extension.httpsessions.HttpSessionsSite
-			
-			zapsessions = org.parosproxy.paros.control.Control.getSingleton().getExtensionLoader().getExtension(org.zaproxy.zap.extension.httpsessions.ExtensionHttpSessions.NAME)
-			sessionSite = zapsessions.getHttpSessionsSite(msg.getRequestHeader().getURI().getHost() + ":" + str(msg.getRequestHeader().getHostPort()), False)
-			
-			seleniumSession = "Auth-Selenium"			
-
-			if sessionSite.getHttpSession(seleniumSession) is not None:
-				seleniumSession = "Re-Auth-Selenium " + str(sessionSite.getNextSessionId())
-			sessionSite.createEmptySession(seleniumSession)
-			
-			import subprocess as sub
-			selenese = sub.Popen("java -jar C:\Users\*\Desktop\Selenium_Custom.b1f2cf5.jar --strict-exit-code --proxy localhost:8080 --screenshot-on-fail C:\Users\*\Desktop\screehns --set-speed 2000 --cli-args /private-window --cli-args about:blank C:\Users\*\Desktop\WebGoat.html", stdout=sub.PIPE)
-			#Get Port from config!
-			#Lib Folder
-			#Test Case by naming
-			output = selenese.communicate()[0]
-			returns = selenese.returncode
-
-			if returns != 0:	
-				print "AUTHENTICATION FAILURE!"
-				print output
-			else:
-				print "Auth-SUCCESS"
-
-				import org.zaproxy.zap.session.CookieBasedSessionManagementHelper
-				org.zaproxy.zap.session.CookieBasedSessionManagementHelper.processMessageToMatchSession(msg, sessionSite.getHttpSession(seleniumSession))
-				helper.getHttpSender().sendAndReceive(msg, False);
-				print 'Re-Send-Authenticated=' + str(msg.getResponseHeader().getStatusCode())
+	if msg.isInScope():
 		
-		else: 
+		if initiator == 2 or initiator == 3 or initiator == 4 or initiator == 6:		
+			logoutIndicators = []
+			logoutIndicators.append({'STATUS':'401'})
+			logoutIndicators.append({'STATUS':'302', 'HEADER':'Location.*login'})
+			logoutIndicators.append({'STATUS':'200', 'BODY':'Please login'})
+			 
+			if  regparser(logoutIndicators, msg) is True:
+				authenticate(msg, initiator, helper)
+			else: 
+				pass
+				#print "rcv-ignote authenticated"
+	
+		else:
 			pass
-			#print "rcv-ignore"
-
+			#print "via-proxy " + str(msg.getResponseHeader().getStatusCode())
 	else:
-		pass
-		#print "via-proxy " + str(msg.getResponseHeader().getStatusCode())
+		print "msg out of scope"
+		
+def authenticate(msg, initiator, helper):
+	print "AUTHENTICATION REQUIRED! Your initiator is: " + str(initiator) + " URL: " + msg.getRequestHeader().getURI().toString()
+
+	sessionSite = getZAPsessionSite(msg)
+	seleniumSession = "Auth-Selenium"
+	
+	import org.zaproxy.zap.extension.script.ScriptVars as vars
+	if vars.getGlobalVar("auth_running") == "True":
+		#wait
+		print "Another authentication is running... waiting..."
+		import time
+		mustend = time.time() + 30
+		while time.time() < mustend:
+			try:
+				time.sleep(1)
+			except:
+				print "Script was interruped, stop processing current message"
+				return
+			if vars.getGlobalVar("auth_running") != "True":
+				resendMessageWithSession(msg, helper, sessionSite.getHttpSession(seleniumSession))
+				return
+		print "timeout exceeded"
+	else:
+		#do auth
+		vars.setGlobalVar("auth_running", "True") 
+
+		if sessionSite.getHttpSession(seleniumSession) is not None:
+			seleniumSession = "Re-Auth-Selenium " + str(sessionSite.getNextSessionId())
+		sessionSite.createEmptySession(seleniumSession)
+		
+		import subprocess as sub
+		selenese = sub.Popen("java -jar C:\Users\*\Desktop\Selenium_Custom.b1f2cf5.jar --strict-exit-code --proxy localhost:8080 --screenshot-on-fail C:\Users\*\Desktop\screehns --set-speed 100 --cli-args /private-window --cli-args about:blank C:\Users\*\Desktop\WebGoat.html", stdout=sub.PIPE)
+		#Get Port from config!
+		#Lib Folder
+		#Test Case by naming
+		output = selenese.communicate()[0]
+		returns = selenese.returncode
+		
+		vars.setGlobalVar("auth_running", "False") 
+		
+		if returns != 0:	
+			print "AUTHENTICATION FAILURE!"
+			print output
+		else:
+			print "Auth-SUCCESS"
+			resendMessageWithSession(msg, helper, sessionSite.getHttpSession(seleniumSession))
+
+def resendMessageWithSession(msg, helper, httpSession):
+	import org.zaproxy.zap.session.CookieBasedSessionManagementHelper as sessionmgmt
+	sessionmgmt.processMessageToMatchSession(msg, httpSession)
+	helper.getHttpSender().sendAndReceive(msg, True);
+	print 'Re-Send-Authenticated=' + str(msg.getResponseHeader().getStatusCode())
+	
+def getZAPsessionSite(msg):
+	import org.parosproxy.paros.control.Control
+	import org.zaproxy.zap.extension.httpsessions.ExtensionHttpSessions
+	import org.zaproxy.zap.extension.httpsessions.HttpSessionsSite
+		
+	zapsessions = org.parosproxy.paros.control.Control.getSingleton().getExtensionLoader().getExtension(org.zaproxy.zap.extension.httpsessions.ExtensionHttpSessions.NAME)
+	return zapsessions.getHttpSessionsSite(msg.getRequestHeader().getURI().getHost() + ":" + str(msg.getRequestHeader().getHostPort()), False)	
