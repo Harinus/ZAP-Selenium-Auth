@@ -55,23 +55,36 @@ def responseReceived(msg, initiator, helper):
 		
 		if initiator == 2 or initiator == 3 or initiator == 4 or initiator == 6:		
 			logoutIndicators = []
+
+			#########################################################################
+			#### Config Section: specifiy logout Indicators and the login script ####
+			#########################################################################
+
+			#Example:
+			#logoutIndicators.append({'STATUS':'200', 'HEADER':'Location.*login', 'BODY':'login'})
+
 			logoutIndicators.append({'STATUS':'401'})
 			logoutIndicators.append({'STATUS':'302', 'HEADER':'Location.*login'})
 			logoutIndicators.append({'STATUS':'200', 'BODY':'Please login'})
+
+			loginTestcase = "C:\Users\hoffm_ma\Desktop\WebGoat.html"
+
+			#########################################################################
 			 
 			if  regparser(logoutIndicators, msg) is True:
-				authenticate(msg, initiator, helper)
+				authenticate(msg, initiator, helper, loginTestcase)
 			else: 
 				pass
-				#print "rcv-ignote authenticated"
+				#print "rcv-ignore authenticated"
 	
 		else:
 			pass
 			#print "via-proxy " + str(msg.getResponseHeader().getStatusCode())
 	else:
-		print "msg out of scope"
+		pass
+		#print "msg out of scope"
 		
-def authenticate(msg, initiator, helper):
+def authenticate(msg, initiator, helper, loginTestcase):
 	print "AUTHENTICATION REQUIRED! Your initiator is: " + str(initiator) + " URL: " + msg.getRequestHeader().getURI().toString()
 
 	sessionSite = getZAPsessionSite(msg)
@@ -92,7 +105,7 @@ def authenticate(msg, initiator, helper):
 			if vars.getGlobalVar("auth_running") != "True":
 				resendMessageWithSession(msg, helper, sessionSite.getHttpSession(seleniumSession))
 				return
-		print "timeout exceeded"
+		print "Authentication timeout exceeded, discard message"
 	else:
 		#do auth
 		vars.setGlobalVar("auth_running", "True") 
@@ -100,12 +113,10 @@ def authenticate(msg, initiator, helper):
 		if sessionSite.getHttpSession(seleniumSession) is not None:
 			seleniumSession = "Re-Auth-Selenium " + str(sessionSite.getNextSessionId())
 		sessionSite.createEmptySession(seleniumSession)
-		
+
 		import subprocess as sub
-		selenese = sub.Popen("java -jar C:\Users\*\Desktop\Selenium_Custom.b1f2cf5.jar --strict-exit-code --proxy localhost:8080 --screenshot-on-fail C:\Users\*\Desktop\screehns --set-speed 100 --cli-args /private-window --cli-args about:blank C:\Users\*\Desktop\WebGoat.html", stdout=sub.PIPE)
-		#Get Port from config!
-		#Lib Folder
-		#Test Case by naming
+		selenese = sub.Popen("java -jar C:\Users\hoffm_ma\git\ZAP-Selenium-Auth\lib\selenese-runner.jar --strict-exit-code --proxy "+ str(getZAPproxy()) +" --no-proxy *.mozilla.com --screenshot-on-fail C:\Users\hoffm_ma\Desktop\screehns --set-speed 100 --cli-args /private-window --cli-args about:blank " + loginTestcase, stdout=sub.PIPE)
+
 		output = selenese.communicate()[0]
 		returns = selenese.returncode
 		
@@ -131,3 +142,8 @@ def getZAPsessionSite(msg):
 		
 	zapsessions = org.parosproxy.paros.control.Control.getSingleton().getExtensionLoader().getExtension(org.zaproxy.zap.extension.httpsessions.ExtensionHttpSessions.NAME)
 	return zapsessions.getHttpSessionsSite(msg.getRequestHeader().getURI().getHost() + ":" + str(msg.getRequestHeader().getHostPort()), False)	
+
+def getZAPproxy():
+	import org.parosproxy.paros.model.Model
+	proxyConfig = org.parosproxy.paros.model.Model.getSingleton().getOptionsParam().getProxyParam();
+	return str(proxyConfig.getProxyIp()) + ":" + str(proxyConfig.getProxyPort())
