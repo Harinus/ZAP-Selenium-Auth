@@ -67,12 +67,14 @@ def responseReceived(msg, initiator, helper):
 			logoutIndicators.append({'STATUS':'302', 'HEADER':'Location.*login'})
 			logoutIndicators.append({'STATUS':'200', 'BODY':'Please login'})
 
-			loginTestcase = "C:\Users\hoffm_ma\Desktop\WebGoat.html"
+			loginTestcase = "C:\Users\*\Desktop\WebGoat.html"
 
 			#########################################################################
 			 
+			errorScreens = '\\'.join(loginTestcase.split('\\')[0:-1]) + "\\errorScreens"		
+	
 			if  regparser(logoutIndicators, msg) is True:
-				authenticate(msg, initiator, helper, loginTestcase)
+				authenticate(msg, initiator, helper, loginTestcase, errorScreens)
 			else: 
 				pass
 				#print "rcv-ignore authenticated"
@@ -84,7 +86,7 @@ def responseReceived(msg, initiator, helper):
 		pass
 		#print "msg out of scope"
 		
-def authenticate(msg, initiator, helper, loginTestcase):
+def authenticate(msg, initiator, helper, loginTestcase, errorScreens):
 	print "AUTHENTICATION REQUIRED! Your initiator is: " + str(initiator) + " URL: " + msg.getRequestHeader().getURI().toString()
 
 	sessionSite = getZAPsessionSite(msg)
@@ -115,7 +117,7 @@ def authenticate(msg, initiator, helper, loginTestcase):
 		sessionSite.createEmptySession(seleniumSession)
 
 		import subprocess as sub
-		selenese = sub.Popen("java -jar C:\Users\hoffm_ma\git\ZAP-Selenium-Auth\lib\selenese-runner.jar --strict-exit-code --proxy "+ str(getZAPproxy()) +" --no-proxy *.mozilla.com --screenshot-on-fail C:\Users\hoffm_ma\Desktop\screehns --set-speed 100 --cli-args /private-window --cli-args about:blank " + loginTestcase, stdout=sub.PIPE)
+		selenese = sub.Popen("java -jar C:\Users\*\git\ZAP-Selenium-Auth\lib\selenese-runner.jar --strict-exit-code --proxy "+ str(getZAPproxy()) +" --no-proxy *.mozilla.com --screenshot-on-fail " + errorScreens + " --set-speed 100 --cli-args /private-window --cli-args about:blank " + loginTestcase, stdout=sub.PIPE)
 
 		output = selenese.communicate()[0]
 		returns = selenese.returncode
