@@ -30,8 +30,6 @@ def sendingRequest(msg, initiator, helper):
 
 def regparser(logoutIndicators, msg):
 	import re
-	msgstring = ""
-	rexstring = ""
 	
 	for indicatorDict in logoutIndicators:
 		matches = []
@@ -94,7 +92,6 @@ def authenticate(msg, initiator, helper, loginTestcase, errorScreens):
 	
 	import org.zaproxy.zap.extension.script.ScriptVars as vars
 	if vars.getGlobalVar("auth_running") == "True":
-		#wait
 		print "Another authentication is running... waiting..."
 		import time
 		mustend = time.time() + 30
@@ -117,7 +114,7 @@ def authenticate(msg, initiator, helper, loginTestcase, errorScreens):
 		sessionSite.createEmptySession(seleniumSession)
 
 		import subprocess as sub
-		selenese = sub.Popen("java -jar C:\Users\*\git\ZAP-Selenium-Auth\lib\selenese-runner.jar --strict-exit-code --proxy "+ str(getZAPproxy()) +" --no-proxy *.mozilla.com --screenshot-on-fail " + errorScreens + " --set-speed 100 --cli-args /private-window --cli-args about:blank " + loginTestcase, stdout=sub.PIPE)
+		selenese = sub.Popen("java -jar lib\selenese-runner.jar --strict-exit-code --proxy "+ str(getZAPproxy()) +" --no-proxy *.mozilla.com --screenshot-on-fail " + errorScreens + " --set-speed 100 --cli-args /private-window --cli-args about:blank " + loginTestcase, stdout=sub.PIPE)
 
 		output = selenese.communicate()[0]
 		returns = selenese.returncode
