@@ -112,9 +112,15 @@ def authenticate(msg, initiator, helper, loginTestcase, errorScreens):
 		if sessionSite.getHttpSession(seleniumSession) is not None:
 			seleniumSession = "Re-Auth-Selenium " + str(sessionSite.getNextSessionId())
 		sessionSite.createEmptySession(seleniumSession)
+		
+		firefoxBinary = 'FirefoxPortableDeveloper\linux\firefox'
+		import platform
+		print platform.platform()
+		if 'Windows' in platform.platform():
+			firefoxBinary  = 'FirefoxPortableDeveloper\FirefoxPortable.exe'		
 
 		import subprocess as sub
-		selenese = sub.Popen("java -jar lib\selenese-runner.jar --strict-exit-code --proxy "+ str(getZAPproxy()) +" --no-proxy *.mozilla.com --screenshot-on-fail " + errorScreens + " --set-speed 100 --cli-args /private-window --cli-args about:blank " + loginTestcase, stdout=sub.PIPE)
+		selenese = sub.Popen("java -jar lib\selenese-runner.jar --strict-exit-code --proxy "+ str(getZAPproxy()) +" --no-proxy *.mozilla.com --screenshot-on-fail " + errorScreens + " --set-speed 100 --cli-args /private-window --cli-args about:blank " + loginTestcase + " --firefox " + firefoxBinary, stdout=sub.PIPE)
 
 		output = selenese.communicate()[0]
 		returns = selenese.returncode
