@@ -61,18 +61,26 @@ def responseReceived(msg, initiator, helper):
 			#Example:
 			#logoutIndicators.append({'STATUS':'200', 'HEADER':'Location.*login', 'BODY':'login'})
 
-			logoutIndicators.append({'STATUS':'401'})
-			logoutIndicators.append({'STATUS':'302', 'HEADER':'Location.*login'})
-			logoutIndicators.append({'STATUS':'200', 'BODY':'Please login'})
+			logoutIndicators.append({'STATUS':'200', 'BODY':'form action="login.php" method="post"'})
+			#logoutIndicators.append({'STATUS':'302', 'HEADER':'Location.*login'})
+			#logoutIndicators.append({'STATUS':'200', 'BODY':'Please login'})
 
-			loginTestcase = "C:\Users\*\Desktop\WebGoat.html"
+			loginTestcase = "C:\Users\*\Desktop\ZAP_DEV\selenium-cases\dvwa.html"
+			loginVerificationRequest = "C:\Users\*\Desktop\workfile.raw"
 
 			#########################################################################
 			 
 			errorScreens = '\\'.join(loginTestcase.split('\\')[0:-1]) + "\\errorScreens"		
 	
 			if  regparser(logoutIndicators, msg) is True:
-				authenticate(msg, initiator, helper, loginTestcase, errorScreens)
+				#print "Current request appears to be logged out"
+				verifyMsg = sendVerificationMessage(loginVerificationRequest, helper, msg)
+				
+				if  regparser(logoutIndicators, verifyMsg) is True:
+					authenticate(msg, initiator, helper, loginTestcase, errorScreens)
+				else:
+					pass
+					#print "Session is still valid!"
 			else: 
 				pass
 				#print "rcv-ignore authenticated"
@@ -83,6 +91,18 @@ def responseReceived(msg, initiator, helper):
 	else:
 		pass
 		#print "msg out of scope"
+
+def sendVerificationMessage(verifyMsgPath, helper, msg):
+	import org.parosproxy.paros.network.HttpMessage
+	import org.parosproxy.paros.network.HttpRequestHeader
+	
+	f = open(verifyMsgPath, 'r')
+	
+	verifyMsg = org.parosproxy.paros.network.HttpMessage()
+	verifyMsg.setRequestHeader(org.parosproxy.paros.network.HttpRequestHeader(str(f.read())))
+	
+	resendMessageWithSession(verifyMsg, helper, getZAPsessionSite(msg).getActiveSession())
+	return verifyMsg
 		
 def authenticate(msg, initiator, helper, loginTestcase, errorScreens):
 	print "AUTHENTICATION REQUIRED! Your initiator is: " + str(initiator) + " URL: " + msg.getRequestHeader().getURI().toString()
@@ -112,15 +132,14 @@ def authenticate(msg, initiator, helper, loginTestcase, errorScreens):
 		if sessionSite.getHttpSession(seleniumSession) is not None:
 			seleniumSession = "Re-Auth-Selenium " + str(sessionSite.getNextSessionId())
 		sessionSite.createEmptySession(seleniumSession)
-		
+
 		firefoxBinary = 'FirefoxPortableDeveloper\linux\firefox'
 		import platform
-		print platform.platform()
 		if 'Windows' in platform.platform():
 			firefoxBinary  = 'FirefoxPortableDeveloper\FirefoxPortable.exe'		
 
 		import subprocess as sub
-		selenese = sub.Popen("java -jar lib\selenese-runner.jar --strict-exit-code --proxy "+ str(getZAPproxy()) +" --no-proxy *.mozilla.com --screenshot-on-fail " + errorScreens + " --set-speed 100 --cli-args /private-window --cli-args about:blank " + loginTestcase + " --firefox " + firefoxBinary, stdout=sub.PIPE)
+		selenese = sub.Popen("java -jar selenese-runner.jar --strict-exit-code --proxy "+ str(getZAPproxy()) +" --no-proxy *.mozilla.com --screenshot-on-fail " + errorScreens + " --set-speed 100 --cli-args /private-window --cli-args about:blank " + loginTestcase + " --firefox " + firefoxBinary, stdout=sub.PIPE)
 
 		output = selenese.communicate()[0]
 		returns = selenese.returncode
@@ -135,10 +154,11 @@ def authenticate(msg, initiator, helper, loginTestcase, errorScreens):
 			resendMessageWithSession(msg, helper, sessionSite.getHttpSession(seleniumSession))
 
 def resendMessageWithSession(msg, helper, httpSession):
-	import org.zaproxy.zap.session.CookieBasedSessionManagementHelper as sessionmgmt
-	sessionmgmt.processMessageToMatchSession(msg, httpSession)
-	helper.getHttpSender().sendAndReceive(msg, True);
-	print 'Re-Send-Authenticated=' + str(msg.getResponseHeader().getStatusCode())
+	if (httpSession is not None and httpSession.getTokenValuesCount() > 0):
+		import org.zaproxy.zap.session.CookieBasedSessionManagementHelper as sessionmgmt
+		sessionmgmt.processMessageToMatchSession(msg, httpSession)
+		helper.getHttpSender().sendAndReceive(msg, True);
+		#print 'Re-Send-Authenticated=' + str(msg.getResponseHeader().getStatusCode())
 	
 def getZAPsessionSite(msg):
 	import org.parosproxy.paros.control.Control
