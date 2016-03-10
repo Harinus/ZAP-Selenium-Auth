@@ -30,7 +30,7 @@ def sendingRequest(msg, initiator, helper):
 
 def regparser(logoutIndicators, msg):
 	import re
-	
+
 	for indicatorDict in logoutIndicators:
 		matches = []
 		if "STATUS" in indicatorDict:
@@ -41,6 +41,12 @@ def regparser(logoutIndicators, msg):
 			matches.append(re.search(regex, msg.getResponseHeader().toString()))
 		if "BODY" in indicatorDict:
 			regex = re.compile(indicatorDict["BODY"])
+			matches.append(re.search(regex, msg.getResponseBody().toString()))
+		if "HEADER/i" in indicatorDict:
+			regex = re.compile(indicatorDict["HEADER/i"],re.IGNORECASE)
+			matches.append(re.search(regex, msg.getResponseHeader().toString()))
+		if "BODY/i" in indicatorDict:
+			regex = re.compile(indicatorDict["BODY/i"],re.IGNORECASE)
 			matches.append(re.search(regex, msg.getResponseBody().toString()))
 		if all(None != s for s in matches):
 			return True
@@ -53,38 +59,62 @@ def responseReceived(msg, initiator, helper):
 		
 		if initiator == 2 or initiator == 3 or initiator == 4 or initiator == 6:		
 			logoutIndicators = []
-
+			
 			#########################################################################
-			#### Config Section: specifiy logout Indicators and the login script ####
-			#########################################################################
+			
+			import os
+			import org.parosproxy.paros.model.Model as sess
+			sfil = sess.getSingleton().getSession().getFileName()
+			if sfil != "":
 
-			#Example:
-			#logoutIndicators.append({'STATUS':'200', 'HEADER':'Location.*login', 'BODY':'login'})
+				divider = '/'
+				import platform
+				if 'Windows' in platform.platform():
+					divider  = '\\'	
 
-			logoutIndicators.append({'STATUS':'200', 'BODY':'form action="login.php" method="post"'})
-			#logoutIndicators.append({'STATUS':'302', 'HEADER':'Location.*login'})
-			#logoutIndicators.append({'STATUS':'200', 'BODY':'Please login'})
-
-			loginTestcase = "C:\Users\*\Desktop\ZAP_DEV\selenium-cases\dvwa.html"
-			loginVerificationRequest = "C:\Users\*\Desktop\workfile.raw"
+				patth = sfil.rpartition(divider)[0]
+				basename = sfil.split(divider)[-1].split(".session")[0]
+	
+				import re
+				if not os.path.isfile(patth + divider + basename + ".json"):
+					print "SAVE AUTHENTICATION SETTINGS! OR DISABLE AUTH SCCRIPT"
+					return
+				f = open(patth + divider + basename + ".json", 'r')
+				text = f.read()
+				results = re.findall('{.*?}', text)
+	
+				for result in results:
+					try:
+						eval("logoutIndicators.append(" + result + ")")
+					except SyntaxError:
+						print "The JSON is invalid! Please check your input!"
+				
+				loginTestcase = patth + divider + basename + ".html" 
+				loginVerificationRequest = patth + divider + basename + ".raw"
+			else:
+				print "Save session first!"
+				return
 
 			#########################################################################
 			 
-			errorScreens = '\\'.join(loginTestcase.split('\\')[0:-1]) + "\\errorScreens"		
+			errorScreens = divider.join(loginTestcase.split(divider)[0:-1]) + divider + "errorScreens"		
 	
 			if  regparser(logoutIndicators, msg) is True:
-				#print "Current request appears to be logged out"
+				print "Current request appears to be logged out"
 				verifyMsg = sendVerificationMessage(loginVerificationRequest, helper, msg)
 				
-				if  regparser(logoutIndicators, verifyMsg) is True:
-					authenticate(msg, initiator, helper, loginTestcase, errorScreens)
+				if  verifyMsg is None or regparser(logoutIndicators, verifyMsg) is True:
+
+					if os.path.isfile(loginTestcase):
+						authenticate(msg, initiator, helper, loginTestcase, errorScreens)
+					else:
+						print "Login Testcase is invalid"
 				else:
 					pass
-					#print "Session is still valid!"
+					print "Session is still valid!"
 			else: 
 				pass
 				#print "rcv-ignore authenticated"
-	
 		else:
 			pass
 			#print "via-proxy " + str(msg.getResponseHeader().getStatusCode())
@@ -95,13 +125,17 @@ def responseReceived(msg, initiator, helper):
 def sendVerificationMessage(verifyMsgPath, helper, msg):
 	import org.parosproxy.paros.network.HttpMessage
 	import org.parosproxy.paros.network.HttpRequestHeader
-	
-	f = open(verifyMsgPath, 'r')
-	
+	import os.path
+
 	verifyMsg = org.parosproxy.paros.network.HttpMessage()
-	verifyMsg.setRequestHeader(org.parosproxy.paros.network.HttpRequestHeader(str(f.read())))
+
+	f = open(verifyMsgPath, 'r')		
+	verifyMsg.setRequestHeader(org.parosproxy.paros.network.HttpRequestHeader(str(f.read())))		
+	if resendMessageWithSession(verifyMsg, helper, getZAPsessionSite(msg).getActiveSession()) is False:
+		print "Auth required"
+		return None
 	
-	resendMessageWithSession(verifyMsg, helper, getZAPsessionSite(msg).getActiveSession())
+	
 	return verifyMsg
 		
 def authenticate(msg, initiator, helper, loginTestcase, errorScreens):
@@ -133,13 +167,14 @@ def authenticate(msg, initiator, helper, loginTestcase, errorScreens):
 			seleniumSession = "Re-Auth-Selenium " + str(sessionSite.getNextSessionId())
 		sessionSite.createEmptySession(seleniumSession)
 
-		firefoxBinary = 'FirefoxPortableDeveloper\linux\firefox'
+		firefoxBinary = 'FirefoxPortableDeveloper/linux/firefox'
 		import platform
 		if 'Windows' in platform.platform():
-			firefoxBinary  = 'FirefoxPortableDeveloper\FirefoxPortable.exe'		
+			firefoxBinary  = 'FirefoxPortable\FirefoxPortable.exe'		
 
 		import subprocess as sub
-		selenese = sub.Popen("java -jar selenese-runner.jar --strict-exit-code --proxy "+ str(getZAPproxy()) +" --no-proxy *.mozilla.com --screenshot-on-fail " + errorScreens + " --set-speed 100 --cli-args /private-window --cli-args about:blank " + loginTestcase + " --firefox " + firefoxBinary, stdout=sub.PIPE)
+		#selenese = sub.Popen("java -jar selenese-runner-2.5.0.jar --strict-exit-code --proxy "+ str(getZAPproxy()) +" --no-proxy *.mozilla.com --screenshot-on-fail \"" + errorScreens + "\" --set-speed 100 --cli-args /private-window --cli-args about:blank \"" + loginTestcase + "\" --firefox " + firefoxBinary, stdout=sub.PIPE)
+		selenese = sub.Popen(["java", "-jar", "selenese-runner-2.5.0.jar", "--strict-exit-code", "--proxy", str(getZAPproxy()), "--no-proxy", "*.mozilla.com", "--screenshot-on-fail", errorScreens, "--set-speed", "100", "--cli-args", "-private-window", "--cli-args", "about:blank", loginTestcase, "--firefox", firefoxBinary], stdout=sub.PIPE)
 
 		output = selenese.communicate()[0]
 		returns = selenese.returncode
@@ -159,6 +194,9 @@ def resendMessageWithSession(msg, helper, httpSession):
 		sessionmgmt.processMessageToMatchSession(msg, httpSession)
 		helper.getHttpSender().sendAndReceive(msg, True);
 		#print 'Re-Send-Authenticated=' + str(msg.getResponseHeader().getStatusCode())
+	else:
+		print "There is no active session or the token is empty"
+		return False
 	
 def getZAPsessionSite(msg):
 	import org.parosproxy.paros.control.Control
